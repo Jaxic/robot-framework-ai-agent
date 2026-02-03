@@ -26,13 +26,15 @@ from mcp.server.fastmcp import FastMCP
 
 from robot import run as robot_run
 from robot.api import ExecutionResult
+from robot.errors import DataError
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TESTS_DIR = PROJECT_ROOT / "tests"
-RESULTS_DIR = PROJECT_ROOT / "results"
+from config import (
+    LOG_FORMAT,
+    PROJECT_ROOT,
+    RESULTS_DIR,
+    TESTS_DIR,
+    VALID_LOG_LEVELS,
+)
 
 # Ensure the results directory exists so every tool can rely on it.
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -44,9 +46,7 @@ logger = logging.getLogger("mcp_server.tools")
 logger.setLevel(logging.DEBUG)
 if not logger.handlers:
     _handler = logging.StreamHandler()
-    _handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    )
+    _handler.setFormatter(logging.Formatter(LOG_FORMAT))
     logger.addHandler(_handler)
 
 # ---------------------------------------------------------------------------
@@ -220,9 +220,14 @@ def execute_test_suite(suite_name: str) -> str:
             report=str(report_html),
         )
         logger.info("robot.run returned rc=%d", rc)
-    except Exception as exc:
-        logger.exception("robot.run raised an exception")
-        return json.dumps({"error": f"Execution failed: {exc}", "timestamp": timestamp})
+    except DataError as exc:
+        # Robot Framework data/parsing error (e.g., invalid test file)
+        logger.exception("robot.run raised DataError")
+        return json.dumps({"error": f"Test data error: {exc}", "timestamp": timestamp})
+    except OSError as exc:
+        # File system errors (permissions, disk full, etc.)
+        logger.exception("robot.run raised OSError")
+        return json.dumps({"error": f"File system error: {exc}", "timestamp": timestamp})
 
     # Parse output.xml for structured results.
     if not output_xml.is_file():
@@ -240,10 +245,17 @@ def execute_test_suite(suite_name: str) -> str:
         payload["return_code"] = rc
         payload["timestamp"] = timestamp
         return json.dumps(payload, indent=2)
-    except Exception as exc:
-        logger.exception("Failed to parse output.xml")
+    except DataError as exc:
+        # Robot Framework couldn't parse the output.xml
+        logger.exception("Failed to parse output.xml: DataError")
         return json.dumps(
             {"error": f"Result parsing failed: {exc}", "return_code": rc, "timestamp": timestamp}
+        )
+    except ET.ParseError as exc:
+        # XML parsing error
+        logger.exception("Failed to parse output.xml: XML error")
+        return json.dumps(
+            {"error": f"Invalid XML in output.xml: {exc}", "return_code": rc, "timestamp": timestamp}
         )
 
 
@@ -279,16 +291,19 @@ def get_latest_results(suite_name: str = "") -> str:
         payload = _result_to_dict(result)
         payload["source"] = str(output_xml.relative_to(PROJECT_ROOT))
         return json.dumps(payload, indent=2)
-    except Exception as exc:
-        logger.exception("Failed to parse %s", output_xml)
+    except DataError as exc:
+        # Robot Framework couldn't parse the output.xml
+        logger.exception("Failed to parse %s: DataError", output_xml)
         return json.dumps({"error": f"Result parsing failed: {exc}"})
+    except ET.ParseError as exc:
+        # XML parsing error
+        logger.exception("Failed to parse %s: XML error", output_xml)
+        return json.dumps({"error": f"Invalid XML in output.xml: {exc}"})
 
 
 # ---------------------------------------------------------------------------
 # Tool 4: search_test_logs
 # ---------------------------------------------------------------------------
-
-_VALID_LEVELS = {"FAIL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"}
 
 
 @mcp.tool()
@@ -306,9 +321,9 @@ def search_test_logs(keyword: str, log_level: str = "FAIL") -> str:
     level = log_level.upper()
     logger.info("search_test_logs called keyword=%r level=%r", keyword, level)
 
-    if level not in _VALID_LEVELS:
+    if level not in VALID_LOG_LEVELS:
         return json.dumps(
-            {"error": f"Invalid log_level '{log_level}'. Must be one of: {sorted(_VALID_LEVELS)}"}
+            {"error": f"Invalid log_level '{log_level}'. Must be one of: {sorted(VALID_LOG_LEVELS)}"}
         )
 
     # Collect all output.xml files.

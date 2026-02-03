@@ -38,14 +38,21 @@ from mcp_server.tools import (
     list_available_tests,
     search_test_logs,
 )
+from config import (
+    CORS_HEADERS,
+    CORS_METHODS,
+    CORS_ORIGINS,
+    LOG_FORMAT,
+    LOG_LEVEL,
+    MCP_SERVER_HOST,
+    MCP_SERVER_PORT,
+    VALID_LOG_LEVELS,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+logging.basicConfig(level=getattr(logging, LOG_LEVEL), format=LOG_FORMAT)
 logger = logging.getLogger("mcp_server.server")
 
 # ---------------------------------------------------------------------------
@@ -59,8 +66,7 @@ logger = logging.getLogger("mcp_server.server")
 SAFE_SUITE_NAME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,63}$")
 # Dangerous patterns that should never appear in any input
 DANGEROUS_PATTERNS = re.compile(r"[/\\;|&$`<>\"']|\.\.|\x00")
-# Valid log levels
-VALID_LOG_LEVELS = {"FAIL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"}
+# Note: VALID_LOG_LEVELS is imported from config
 
 
 def _validate_suite_name(value: str, field_name: str = "suite_name", allow_empty: bool = False) -> str:
@@ -181,18 +187,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow local Streamlit (default port 8501) and any localhost origin.
+# CORS — restricted to configured origins only (from config.py).
+# Only allow methods and headers actually needed by the application.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8501",
-        "http://127.0.0.1:8501",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=CORS_METHODS,
+    allow_headers=CORS_HEADERS,
 )
 
 # ---------------------------------------------------------------------------
@@ -228,32 +230,73 @@ async def list_tools():
     )
 
 
+def _safe_json_parse(raw: str) -> dict | list:
+    """Parse JSON string, returning error dict on failure.
+
+    Args:
+        raw: JSON string to parse.
+
+    Returns:
+        Parsed JSON object, or error dict if parsing fails.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse tool response as JSON: %s", exc)
+        return {"error": "Internal error: tool returned invalid JSON"}
+
+
 @app.post("/tools/list_tests")
-async def api_list_tests():
-    """List available Robot Framework test suites."""
+async def api_list_tests() -> JSONResponse:
+    """List available Robot Framework test suites.
+
+    Returns:
+        JSON array of test suite objects with name, file, and description.
+    """
     raw = list_available_tests()
-    return JSONResponse(content=json.loads(raw))
+    return JSONResponse(content=_safe_json_parse(raw))
 
 
 @app.post("/tools/execute")
-async def api_execute(req: ExecuteRequest):
-    """Execute a test suite by name."""
+async def api_execute(req: ExecuteRequest) -> JSONResponse:
+    """Execute a test suite by name.
+
+    Args:
+        req: Request containing suite_name to execute.
+
+    Returns:
+        JSON object with execution results including status, passed/failed counts.
+    """
     raw = execute_test_suite(req.suite_name)
-    return JSONResponse(content=json.loads(raw))
+    return JSONResponse(content=_safe_json_parse(raw))
 
 
 @app.post("/tools/results")
-async def api_results(req: ResultsRequest):
-    """Fetch the latest parsed results."""
+async def api_results(req: ResultsRequest) -> JSONResponse:
+    """Fetch the latest parsed results.
+
+    Args:
+        req: Request with optional suite_name filter.
+
+    Returns:
+        JSON object with test results from the most recent output.xml.
+    """
     raw = get_latest_results(req.suite_name or "")
-    return JSONResponse(content=json.loads(raw))
+    return JSONResponse(content=_safe_json_parse(raw))
 
 
 @app.post("/tools/search_logs")
-async def api_search_logs(req: SearchLogsRequest):
-    """Search output.xml log messages."""
+async def api_search_logs(req: SearchLogsRequest) -> JSONResponse:
+    """Search output.xml log messages.
+
+    Args:
+        req: Request with keyword and log_level filters.
+
+    Returns:
+        JSON array of matching log entries with test context.
+    """
     raw = search_test_logs(req.keyword, req.log_level)
-    return JSONResponse(content=json.loads(raw))
+    return JSONResponse(content=_safe_json_parse(raw))
 
 
 # ---------------------------------------------------------------------------
@@ -261,21 +304,26 @@ async def api_search_logs(req: SearchLogsRequest):
 # ---------------------------------------------------------------------------
 
 def _handle_sigint(sig, frame):
-    logger.info("Received SIGINT — shutting down gracefully")
-    sys.exit(0)
+    """Handle SIGINT (Ctrl+C) by raising KeyboardInterrupt for graceful shutdown.
+
+    This allows the FastAPI lifespan context manager to run its cleanup code
+    rather than exiting abruptly with sys.exit().
+    """
+    logger.info("Received SIGINT — initiating graceful shutdown")
+    raise KeyboardInterrupt
 
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, _handle_sigint)
 
     print("\n  Robot Framework MCP Server")
-    print("  http://127.0.0.1:8000")
-    print("  http://127.0.0.1:8000/docs  (Swagger UI)")
+    print(f"  http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}")
+    print(f"  http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}/docs  (Swagger UI)")
     print("  Press Ctrl+C to stop\n")
 
     uvicorn.run(
         "mcp_server.server:app",
-        host="127.0.0.1",
-        port=8000,
-        log_level="info",
+        host=MCP_SERVER_HOST,
+        port=MCP_SERVER_PORT,
+        log_level=LOG_LEVEL.lower(),
     )

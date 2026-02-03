@@ -25,17 +25,17 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from langchain_ollama import ChatOllama
 
-logger = logging.getLogger("agent.llm_config")
+from config import (
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    OLLAMA_NUM_CTX,
+    OLLAMA_TEMPERATURE,
+)
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "qwen2.5:32b-instruct-q4_k_m"
-TEMPERATURE = 0.1
-NUM_CTX = 2048
+logger = logging.getLogger("agent.llm_config")
 
 
 def get_llm() -> ChatOllama:
@@ -53,8 +53,8 @@ def get_llm() -> ChatOllama:
     return ChatOllama(
         model=OLLAMA_MODEL,
         base_url=OLLAMA_BASE_URL,
-        temperature=TEMPERATURE,
-        num_ctx=NUM_CTX,
+        temperature=OLLAMA_TEMPERATURE,
+        num_ctx=OLLAMA_NUM_CTX,
     )
 
 
@@ -70,16 +70,26 @@ def test_connection() -> bool:
         logger.info("Ollama responded: %s", response.content.strip()[:80])
         print(f"[OK] Ollama connected — model {OLLAMA_MODEL} is responding")
         return True
-    except Exception as exc:
-        msg = str(exc)
+    except httpx.ConnectError as exc:
+        # Connection refused - Ollama not running
         print(f"[FAIL] Cannot reach Ollama at {OLLAMA_BASE_URL}")
-        if "Connection refused" in msg or "ConnectError" in msg:
-            print("  -> Is Ollama running?  Start it with:  ollama serve")
-        elif "not found" in msg.lower() or "404" in msg:
+        print("  -> Is Ollama running?  Start it with:  ollama serve")
+        logger.error("Ollama connection failed: %s", exc)
+        return False
+    except httpx.HTTPStatusError as exc:
+        # HTTP error (404 = model not found, etc.)
+        print(f"[FAIL] Ollama returned HTTP error: {exc.response.status_code}")
+        if exc.response.status_code == 404:
             print(f"  -> Model not pulled?  Run:  ollama pull {OLLAMA_MODEL}")
         else:
-            print(f"  -> Error: {msg[:200]}")
-        logger.error("Ollama connection test failed: %s", msg)
+            print(f"  -> Error: {exc}")
+        logger.error("Ollama HTTP error: %s", exc)
+        return False
+    except (httpx.RequestError, ValueError) as exc:
+        # Other network errors or response parsing issues
+        print(f"[FAIL] Cannot reach Ollama at {OLLAMA_BASE_URL}")
+        print(f"  -> Error: {type(exc).__name__}: {str(exc)[:200]}")
+        logger.error("Ollama connection test failed: %s", exc)
         return False
 
 

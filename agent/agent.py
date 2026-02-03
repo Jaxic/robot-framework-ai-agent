@@ -39,32 +39,40 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 
 from agent.llm_config import get_llm
+from config import MCP_SERVER_URL, TEST_EXECUTION_TIMEOUT
 
 logger = logging.getLogger("agent.agent")
-
-# ---------------------------------------------------------------------------
-# MCP server base URL
-# ---------------------------------------------------------------------------
-MCP_SERVER_URL = "http://127.0.0.1:8000"
 
 
 def _mcp_post(endpoint: str, payload: Optional[dict] = None) -> dict | list:
     """POST to an MCP server endpoint and return parsed JSON.
 
-    Raises a readable error string (not an exception) so the agent
-    can report the problem to the user instead of crashing.
+    Args:
+        endpoint: API endpoint path (e.g., "/tools/execute").
+        payload: Optional JSON payload to send.
+
+    Returns:
+        Parsed JSON response, or error dict if request fails.
     """
     url = f"{MCP_SERVER_URL}{endpoint}"
     try:
-        resp = requests.post(url, json=payload or {}, timeout=120)
+        resp = requests.post(url, json=payload or {}, timeout=TEST_EXECUTION_TIMEOUT)
         resp.raise_for_status()
         return resp.json()
-    except requests.ConnectionError:
+    except requests.ConnectionError as exc:
+        logger.warning("MCP connection error on %s: %s", endpoint, exc)
         return {"error": f"Cannot reach MCP server at {MCP_SERVER_URL}. Is it running?"}
-    except requests.Timeout:
+    except requests.Timeout as exc:
+        logger.warning("MCP timeout on %s: %s", endpoint, exc)
         return {"error": f"MCP server timed out on {endpoint}"}
-    except Exception as exc:
-        return {"error": f"MCP request failed: {exc}"}
+    except requests.RequestException as exc:
+        # Catch all other request-related errors (HTTPError, etc.)
+        logger.warning("MCP request error on %s: %s", endpoint, exc)
+        return {"error": f"MCP request failed: {type(exc).__name__}"}
+    except json.JSONDecodeError as exc:
+        # Server returned non-JSON response
+        logger.warning("MCP returned invalid JSON on %s: %s", endpoint, exc)
+        return {"error": "MCP server returned an invalid response"}
 
 
 def _format_response(data: dict | list) -> str:

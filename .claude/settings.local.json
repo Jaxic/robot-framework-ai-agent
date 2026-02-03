@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(./venv/Scripts/pip install:*)",
+      "Bash(ls:*)",
+      "Bash(dir \"x:\\\\Robot_Framework\\\\venv\\\\Lib\\\\site-packages\"\")",
+      "Bash(findstr:*)",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"from agent.llm_config import get_llm, test_connection; print\\(''llm_config OK''\\)\")",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"from agent.agent import get_agent; print\\(''agent OK''\\)\")",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"from agent import get_llm, test_connection, get_agent; print\\(''All agent exports OK''\\)\")",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\pip.exe\" install:*)",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"from agent.llm_config import get_llm; llm = get_llm\\(\\); print\\(''No deprecation warning — import OK''\\)\")",
+      "Bash(dir:*)",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"import streamlit; print\\(f''streamlit {streamlit.__version__} OK''\\)\")",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"from ui.app import check_mcp_server, check_ollama, MCP_SERVER_URL; print\\(f''ui.app imports OK \\(MCP_SERVER_URL={MCP_SERVER_URL}\\)''\\)\")",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\":*)",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c:*)",
+      "Bash(\"x:\\\\Robot_Framework\\\\venv\\\\Scripts\\\\python.exe\" -c \"from agent.agent import SYSTEM_PROMPT; print\\(''Agent import OK''\\); print\\(f''System prompt length: {len\\(SYSTEM_PROMPT\\)} chars''\\)\")"
+    ]
+  }
+}

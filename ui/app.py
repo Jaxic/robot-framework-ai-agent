@@ -32,6 +32,16 @@ if _PROJECT_ROOT not in sys.path:
 import requests
 import streamlit as st
 
+from config import (
+    AUTH_PASSWORD,
+    AUTH_USERNAME,
+    HEALTH_CHECK_TIMEOUT,
+    LOG_FORMAT,
+    LOG_LEVEL,
+    MCP_SERVER_URL,
+    OLLAMA_BASE_URL,
+)
+
 # ---------------------------------------------------------------------------
 # Page configuration (must be first Streamlit call)
 # ---------------------------------------------------------------------------
@@ -44,18 +54,36 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=getattr(logging, LOG_LEVEL), format=LOG_FORMAT)
 logger = logging.getLogger("ui.app")
 
-# ---------------------------------------------------------------------------
-# Authentication Configuration
-# ---------------------------------------------------------------------------
-# Default credentials (override via environment variables for production)
-# In production, set these environment variables:
-#   RFAI_USERNAME=your_username
-#   RFAI_PASSWORD=your_secure_password
-AUTH_USERNAME = os.environ.get("RFAI_USERNAME", "admin")
-AUTH_PASSWORD = os.environ.get("RFAI_PASSWORD", "rfai2024")
+
+def _check_auth_configured() -> bool:
+    """Check if authentication credentials are configured.
+
+    Returns:
+        True if both username and password are set, False otherwise.
+    """
+    return bool(AUTH_USERNAME and AUTH_PASSWORD)
+
+
+def _show_auth_missing_error() -> None:
+    """Display error message when auth credentials are not configured."""
+    st.error(
+        "**Authentication not configured.**\n\n"
+        "You must set environment variables before starting the application."
+    )
+    st.code(
+        "# Windows (Command Prompt)\n"
+        "set RFAI_USERNAME=admin\n"
+        "set RFAI_PASSWORD=your_secure_password\n\n"
+        "# Windows (PowerShell)\n"
+        "$env:RFAI_USERNAME='admin'\n"
+        "$env:RFAI_PASSWORD='your_secure_password'\n\n"
+        "# Then restart: streamlit run ui/app.py",
+        language="bash"
+    )
+    logger.error("Missing RFAI_USERNAME or RFAI_PASSWORD environment variables")
 
 
 def check_password() -> bool:
@@ -63,17 +91,25 @@ def check_password() -> bool:
 
     Returns True if authenticated, False otherwise.
     Uses session state to persist authentication across reruns.
-    """
 
-    def password_entered():
+    If credentials are not configured via environment variables,
+    displays an error message and returns False.
+    """
+    # Check if auth is configured
+    if not _check_auth_configured():
+        st.title("\U0001f512 Robot Framework AI Assistant")
+        _show_auth_missing_error()
+        return False
+
+    def password_entered() -> None:
         """Validate entered credentials using constant-time comparison."""
         username_correct = hmac.compare_digest(
             st.session_state.get("username", "").encode(),
-            AUTH_USERNAME.encode()
+            (AUTH_USERNAME or "").encode()
         )
         password_correct = hmac.compare_digest(
             st.session_state.get("password", "").encode(),
-            AUTH_PASSWORD.encode()
+            (AUTH_PASSWORD or "").encode()
         )
 
         if username_correct and password_correct:
@@ -109,12 +145,6 @@ def check_password() -> bool:
 
     return False
 
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-MCP_SERVER_URL = "http://127.0.0.1:8000"
-OLLAMA_URL = "http://localhost:11434"
 
 # ---------------------------------------------------------------------------
 # Custom CSS
@@ -182,20 +212,30 @@ st.markdown(
 # Health-check helpers
 # ---------------------------------------------------------------------------
 def check_mcp_server() -> bool:
-    """Return True if the MCP server /health endpoint responds."""
+    """Return True if the MCP server /health endpoint responds.
+
+    Returns:
+        True if server is healthy, False otherwise.
+    """
     try:
-        resp = requests.get(f"{MCP_SERVER_URL}/health", timeout=3)
+        resp = requests.get(f"{MCP_SERVER_URL}/health", timeout=HEALTH_CHECK_TIMEOUT)
         return resp.status_code == 200
-    except Exception:
+    except requests.RequestException:
+        # Connection error, timeout, or other request failure
         return False
 
 
 def check_ollama() -> bool:
-    """Return True if Ollama is reachable."""
+    """Return True if Ollama is reachable.
+
+    Returns:
+        True if Ollama API responds, False otherwise.
+    """
     try:
-        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
+        resp = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=HEALTH_CHECK_TIMEOUT)
         return resp.status_code == 200
-    except Exception:
+    except requests.RequestException:
+        # Connection error, timeout, or other request failure
         return False
 
 
