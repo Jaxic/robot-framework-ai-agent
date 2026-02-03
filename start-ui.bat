@@ -33,16 +33,11 @@ REM ============================================================================
 echo Starting Streamlit Chat UI...
 echo.
 
-REM Set default credentials if not already set
-REM IMPORTANT: Change these for production use!
-if not defined RFAI_USERNAME (
-    set RFAI_USERNAME=admin
-    echo Setting default RFAI_USERNAME=admin
-)
-if not defined RFAI_PASSWORD (
-    set RFAI_PASSWORD=RobotFun!
-    echo Setting default RFAI_PASSWORD=changeme123
-)
+REM Authentication credentials are read from environment variables.
+REM Recommended: create a local .env file in the project root (it is gitignored)
+REM and set:
+REM   RFAI_USERNAME=admin
+REM   RFAI_PASSWORD=your_secure_password
 
 echo.
 echo This provides the web-based chat interface for the AI agent.
@@ -53,8 +48,8 @@ echo Login credentials:
 echo   Username: %RFAI_USERNAME%
 echo   Password: [hidden]
 echo.
-echo To use different credentials, set RFAI_USERNAME and RFAI_PASSWORD
-echo environment variables before running this script.
+echo To set credentials, create a .env file in the project root or set
+echo RFAI_USERNAME and RFAI_PASSWORD environment variables before running.
 echo.
 echo Press Ctrl+C to stop the server.
 echo ============================================================================

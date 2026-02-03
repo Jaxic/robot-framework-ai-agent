@@ -37,12 +37,25 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+# Load environment variables from a local .env file (not committed to git).
+# This allows keeping secrets like RFAI_PASSWORD out of batch scripts and repo history.
+#
+# Note: `.env` is already ignored by `.gitignore` in this repo.
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - best-effort optional import
+    load_dotenv = None
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
 TESTS_DIR = PROJECT_ROOT / "tests"
 RESULTS_DIR = PROJECT_ROOT / "results"
+
+# Best-effort load from PROJECT_ROOT/.env without overriding already-set env vars
+if load_dotenv is not None:
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 # ---------------------------------------------------------------------------
 # MCP Server Configuration

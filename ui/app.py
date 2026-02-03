@@ -71,9 +71,16 @@ def _show_auth_missing_error() -> None:
     """Display error message when auth credentials are not configured."""
     st.error(
         "**Authentication not configured.**\n\n"
-        "You must set environment variables before starting the application."
+        "You must set credentials before starting the application.\n\n"
+        "**Recommended:** create a local `.env` file in the project root (it is gitignored)."
     )
     st.code(
+        "# Option A (recommended): .env file in project root\n"
+        "copy env.example .env\n"
+        "# Edit .env and set:\n"
+        "RFAI_USERNAME=admin\n"
+        "RFAI_PASSWORD=your_secure_password\n\n"
+        "# Option B: set environment variables for this session\n"
         "# Windows (Command Prompt)\n"
         "set RFAI_USERNAME=admin\n"
         "set RFAI_PASSWORD=your_secure_password\n\n"

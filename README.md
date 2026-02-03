@@ -83,6 +83,21 @@ pip install -r requirements.txt
 pip install langchain-ollama
 ```
 
+### 4. Configure UI login credentials (recommended)
+
+Create a local `.env` file in the project root (it is ignored by git). You can copy the template:
+
+```bash
+copy env.example .env
+```
+
+Then edit `.env` and set:
+
+```text
+RFAI_USERNAME=admin
+RFAI_PASSWORD=your_secure_password
+```
+
 ### 4. Pull the Ollama model
 
 ```bash
